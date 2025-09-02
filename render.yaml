@@ -1,0 +1,64 @@
+services:
+  - type: web
+    name: whatsapp-assistant-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: TIMEZONE
+        value: America/Guayaquil
+      - key: LOG_LEVEL
+        value: info
+      - key: META_API_VERSION
+        value: v21.0
+      - key: ENABLE_META_SIGNATURE
+        value: "true"
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_ASSISTANT_ID
+        sync: false
+      - key: OPENAI_MODEL
+        value: ""
+      - key: OPENAI_RUN_POLL_MS
+        value: "2000"
+      - key: BITRIX_WEBHOOK_BASE
+        sync: false
+      - key: BITRIX_OAUTH_TOKEN
+        sync: false
+      - key: BITRIX_BASE_URL
+        sync: false
+      - key: BITRIX_DEAL_CATEGORY_ID
+        value: "0"
+      - key: BITRIX_DEAL_STAGE_ID
+        value: NEW
+      - key: BITRIX_DISABLE_FALLBACK_DEAL
+        value: "false"
+      - key: SAVE_TRANSCRIPTS_TO_BITRIX
+        value: "true"
+      - key: SAVE_BOT_REPLIES_TO_BITRIX
+        value: "true"
+      - key: APPOINTMENTS_ENABLED
+        value: "true"
+      - key: APPOINTMENT_DURATION_MIN
+        value: "60"
+      - key: SELLER_WHATSAPP_NOTIFY
+        value: "true"
+      - key: SELLER_NUMBERS
+        value: 593984679525,593996404203
+      - key: ALLOW_FILE_UPLOADS
+        value: "true"
+      - key: MAX_FILE_MB
+        value: "20"
+      - key: ALLOWED_MIME_LIST
+        value: application/pdf,image/jpeg,image/png,text/plain
