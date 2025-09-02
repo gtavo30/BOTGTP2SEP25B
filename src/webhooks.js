@@ -32,49 +32,7 @@ router.get('/whatsapp', (req, res) => {
 
 // Incoming
 router.post('/whatsapp', async (req, res) => {
-  // --- ensure Bitrix contact/deal + log incoming message (idempotent) ---
-try {
-  const body = req.body || {};
-  const change = body?.entry?.[0]?.changes?.[0];
-  const val = change?.value || {};
-  const msg = val?.messages?.[0];
-  const from = msg?.from || '';
-  const textBody = msg?.text?.body || msg?.interactive?.nfm_reply?.response_json || '';
-  const profileName = val?.contacts?.[0]?.profile?.name || '';
-
-  const contactId = await findOrCreateContactByPhone(from, profileName);
-
-  let dealId = await findDealByContact(contactId);
-  if (!dealId) {
-    const title = `${config.projectName || 'Proyecto'} - Lead WhatsApp ${from}`;
-    dealId = await createDeal(contactId, title);
-  }
-
-  const when = new Date().toISOString().slice(0,19).replace('T',' ');
-  const line = `🗨️ *Cliente* (${when}):
-${textBody}`;
-  await addTimelineCommentToDeal(dealId, line);
-
-  req._bitrix = { contactId, dealId, from, profileName, textBody };
-} catch (bxErr) {
-  error('Bitrix logging failed', bxErr?.response?.data || bxErr?.message || bxErr);
-}
-// --- end ensure Bitrix block ---
-// --- request start log ---
-try {
-  console.log('[webhook] POST /webhooks/whatsapp at', new Date().toISOString());
-  const body = req.body || {};
-  const entry = body?.entry?.[0] || {};
-  const change = entry?.changes?.[0] || {};
-  const val = change?.value || {};
-  const msg = val?.messages?.[0] || {};
-  const from = msg?.from || '';
-  const type = msg?.type || 'text';
-  const textBody = msg?.text?.body || msg?.interactive?.nfm_reply?.response_json || '';
-  console.log('[webhook] from=', from, 'type=', type, 'text.len=', textBody?.length || 0);
-} catch (e) { console.error('[webhook] start log error', e.message); }
-// --- end start log ---
-res.sendStatus(200); // respond immediately
+  res.sendStatus(200); // respond immediately
   if (!verifyMetaSignature(req)) return;
 
   try {
@@ -166,9 +124,7 @@ res.sendStatus(200); // respond immediately
   } catch (e) {
     error('Webhook handling failed', e);
   }
-try { console.log('[webhook] POST /webhooks/whatsapp done at', new Date().toISOString()); } catch {}
 });
 
 // Health
-
 router.get('/health', (_req, res) => res.json({ ok: true }));
