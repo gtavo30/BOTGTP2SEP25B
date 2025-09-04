@@ -1,89 +1,108 @@
 import OpenAI from "openai";
 import { config } from './config.js';
-import { error } from './utils/logger.js';
+import { log, error } from './utils/logger.js';
 
 /**
- * Chat Completions shim con:
- * - Memoria corta (8 turnos) por threadId.
- * - Parámetros más deterministas (temperature 0.2).
- * - Prompt reforzado con reglas claras.
- * - Logging seguro (sin headers/config).
- * Mantiene la misma interfaz pública para no tocar el resto del código:
- *   createThread, uploadFile, addMessage, runAssistant
+ * Passthrough a la Assistants API (como el bot original):
+ * - Crea thread, añade mensaje de usuario, ejecuta run con assistant_id.
+ * - Hace polling hasta 'completed' y devuelve el texto del asistente.
+ * - Sin modificar el prompt (vive en el Assistant configurado en OpenAI).
+ * - Sin reglas extra, sin grounding, sin trucos: comportamiento original.
+ * - Logs seguros (no imprimir headers/request).
+ *
+ * Exporta la misma interfaz usada por el resto del proyecto:
+ *   - createThread()
+ *   - uploadFile(buffer, filename)   [no-op suave; devuelve marcador]
+ *   - addMessage(threadId, role, content, attachments)
+ *   - runAssistant(threadId)
  */
 
 const client = new OpenAI({ apiKey: config.openai.apiKey });
 
-// Historial corto por threadId
-const __history = new Map(); // threadId -> [{role, content}]
-
-const SYSTEM_PROMPT = [
-  "- Ya tienes el número de WhatsApp del cliente; NUNCA pidas ni confirmes el teléfono.",
-  "Eres un asistente de ventas inmobiliarias de Constructora Sarmiento Rodas.",
-  "- Responde en ESPAÑOL neutro, breve (1–3 líneas).",
-  "- NO inventes datos; si falta info, pide UNA sola aclaración concreta.",
-  "- Si el usuario pide CITA/VISITA: detecta fecha y hora. Si faltan, pide la hora.",
-  "- Nunca compartas información sensible ni datos internos.",
-].join("\n");
-
-export async function createThread() {
-  return 't_' + Math.random().toString(36).slice(2);
+function getAssistantId() {
+  return (
+    (config?.openai?.assistantId) ||
+    process.env.OPENAI_ASSISTANT_ID ||
+    process.env.ASSISTANT_ID ||
+    ""
+  );
 }
 
-export async function uploadFile(_buffer, filename) {
-  // Marcador simple para referencia (no se sube a OpenAI en este modo)
+export async function createThread() {
+  const t = await client.beta.threads.create();
+  log('[assistants] thread.create', { id: t.id });
+  return t.id;
+}
+
+export async function uploadFile(_buffer, filename = 'upload.bin') {
+  // En el bot original rara vez se usó archivo. Para mantener compatibilidad
+  // devolvemos un marcador textual; si necesitas subir archivos reales,
+  // podemos ampliar a client.files.create con streams.
   return `file:${filename}`;
 }
 
 export async function addMessage(threadId, role, content, attachments = []) {
-  let text = String(content || '');
-  if (attachments && attachments.length) {
-    text += `\n[Adjuntos: ${attachments.join(', ')}]`;
-  }
-  const arr = __history.get(threadId) || [];
-  arr.push({ role, content: text });
-  while (arr.length > 8) arr.shift(); // memoria corta
-  __history.set(threadId, arr);
+  const text = String(content || '');
+  const attNote = attachments && attachments.length
+    ? `\n[Adjuntos: ${attachments.join(', ')}]`
+    : '';
+  await client.beta.threads.messages.create(threadId, {
+    role: role === 'assistant' ? 'assistant' : 'user',
+    content: text + attNote
+  });
+  log('[assistants] message.add', { threadId, role });
 }
 
-function buildMessages(threadId) {
-  const arr = __history.get(threadId) || [];
-  // Forzamos prefijo de sistema con reglas
-  const msgs = [{ role: "system", content: SYSTEM_PROMPT }];
-  // Conservamos historial reciente
-  for (const m of arr) {
-    // Solo roles válidos para chat.completions
-    const role = (m.role === "assistant" ? "assistant" : "user");
-    msgs.push({ role, content: m.content });
+async function waitForRun(threadId, runId, { timeoutMs = 45000, intervalMs = 800 } = {}) {
+  const start = Date.now();
+  while (true) {
+    const run = await client.beta.threads.runs.retrieve(threadId, runId);
+    if (run.status === 'completed') return run;
+    if (run.status === 'failed' || run.status === 'cancelled' || run.status === 'expired') {
+      throw new Error(`run status=${run.status}`);
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('run timeout');
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
   }
-  return msgs;
+}
+
+function extractAssistantText(messagesList) {
+  // Busca el último mensaje 'assistant' y concatena segmentos de texto
+  for (const msg of messagesList.data) {
+    if (msg.role === 'assistant' && msg.content?.length) {
+      const parts = msg.content
+        .filter(p => p.type === 'text' && p.text?.value)
+        .map(p => p.text.value);
+      if (parts.length) return parts.join('\n').trim();
+    }
+  }
+  // Si no hay 'assistant', intenta devolver lo último legible
+  const any = messagesList.data?.[0]?.content?.[0]?.text?.value || '';
+  return (any || '').trim();
 }
 
 export async function runAssistant(threadId) {
+  const assistantId = getAssistantId();
+  if (!assistantId) {
+    error('[assistants] missing assistant_id');
+    return 'Gracias, en un momento te confirmo.';
+  }
   try {
-    const messages = buildMessages(threadId);
-    const r = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      temperature: 0.2,
-      top_p: 1,
-      frequency_penalty: 0.1,
-      presence_penalty: 0,
-      max_tokens: 600
-    });
-    const out = (r.choices?.[0]?.message?.content || "").trim() || "Gracias, en un momento te confirmo.";
+    const run = await client.beta.threads.runs.create(threadId, { assistant_id: assistantId });
+    log('[assistants] run.create', { threadId, runId: run.id });
 
-    // Guardar respuesta del asistente en el historial para coherencia en siguientes turnos
-    const arr = __history.get(threadId) || [];
-    arr.push({ role: "assistant", content: out });
-    while (arr.length > 8) arr.shift();
-    __history.set(threadId, arr);
+    await waitForRun(threadId, run.id);
 
-    // Post-procesado mínimo: limitar a 3 líneas duras para evitar divagues
-    return out;} catch (e) {
+    const messages = await client.beta.threads.messages.list(threadId, { limit: 10 });
+    const out = extractAssistantText(messages) || 'Gracias, en un momento te confirmo.';
+    log('[assistants] run.completed', { threadId });
+    return out;
+  } catch (e) {
     const status = e?.status || e?.response?.status;
-    const message = e?.response?.data?.error?.message || e?.message || "openai_error";
-    try { error('[openai] fail', { status, message }); } catch {}
-    return "Gracias por escribirnos. Enseguida te confirmo por aquí.";
+    const message = e?.response?.data?.error?.message || e?.message || 'assistants_error';
+    error('[assistants] fail', { status, message });
+    return 'Gracias, en un momento te confirmo.';
   }
 }
