@@ -1,73 +1,73 @@
 import axios from 'axios';
-import qs from 'qs';
-import { config } from './config.js';
-import { error } from './utils/logger.js';
 
-function base() {
-  if (config.bitrix.webhookBase) return config.bitrix.webhookBase.replace(/\/$/,'') + '/';
-  if (config.bitrix.oauthToken && config.bitrix.baseUrl) return `${config.bitrix.baseUrl.replace(/\/$/,'')}/rest/`;
-  throw new Error('Bitrix24 not configured');
+// Base del webhook con slash final, ej: https://dominio.bitrix24.es/rest/1/TOKEN/
+const BASE = process.env.BITRIX_WEBHOOK_BASE;
+if (!BASE) {
+  console.error('[FATAL] Falta BITRIX_WEBHOOK_BASE');
+  process.exit(1);
 }
 
-function headers() {
-  return config.bitrix.oauthToken ? { Authorization: `Bearer ${config.bitrix.oauthToken}` } : {};
+const http = axios.create({
+  baseURL: BASE,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+function url(method){ return method.startsWith('crm.') ? `${method}.json` : method; }
+
+function chooseOwnerId(projectText=''){
+  const t = (projectText||'').toLowerCase();
+  if (t.includes('venetto')) return 197;
+  return Math.random() < 0.5 ? 4 : 185;
 }
 
-async function call(method, params={}) {
-  const url = base() + method;
-  const data = config.bitrix.oauthToken ? qs.stringify(params) : params;
-  const opts = config.bitrix.oauthToken ? { headers: { ...headers(), 'Content-Type': 'application/x-www-form-urlencoded' } } : {};
-  const { data: res } = await axios.post(url, data, opts);
-  if (res.error) throw new Error(JSON.stringify(res));
-  return res.result;
-}
-
-// --- Minimal helpers focused on our scope (save chat & create appointment) ---
-
-export async function findOrCreateContactByPhone(phone) {
-  // Try search contact by phone
-  const contacts = await call('crm.contact.list', { filter: { '%PHONE': phone }, select: ['ID'] });
-  if (contacts.length) return contacts[0].ID;
-  // Create new contact if not found
-  const id = await call('crm.contact.add', { fields: { NAME: phone, PHONE: [{ VALUE: phone, VALUE_TYPE: 'WORK' }] } });
-  return id;
-}
-
-export async function findDealByContact(contactId) {
-  const deals = await call('crm.deal.list', { filter: { CONTACT_ID: contactId }, order: { ID: 'DESC' }, select: ['ID'] });
-  return deals[0]?.ID || null;
-}
-
-export async function createDeal(contactId, title) {
-  const id = await call('crm.deal.add', { fields: { TITLE: title, CATEGORY_ID: Number(config.bitrix.dealCategoryId), STAGE_ID: config.bitrix.dealStageId, CONTACT_ID: contactId } });
-  return id;
-}
-
-export async function addTimelineCommentToDeal(dealId, text) {
-  // crm.timeline.comment.add requires binding to owner
-  return await call('crm.timeline.comment.add', {
-    fields: {
-      ENTITY_TYPE: 'deal',
-      ENTITY_ID: Number(dealId),
-      COMMENT: text
+export async function createLeadAlways({ phone, name='WhatsApp Lead', projectText='', extraFields={} }={}){
+  const ASSIGNED_BY_ID = chooseOwnerId(projectText);
+  const payload = {
+    FIELDS: {
+      TITLE: name,
+      NAME: name,
+      SOURCE_ID: 'WHATSAPP',
+      ASSIGNED_BY_ID,
+      PHONE: [{ VALUE: String(phone||''), VALUE_TYPE: 'MOBILE' }],
+      ...extraFields,
     }
-  });
+  };
+  const { data } = await http.post(url('crm.lead.add'), payload);
+  return data;
 }
 
-export async function createAppointment(dealId, subject, isoStart, durationMinutes=60, description='') {
-  // Create an activity linked to the deal
-  const start = new Date(isoStart);
-  const end = new Date(start.getTime() + durationMinutes*60000);
-  return await call('crm.activity.add', {
-    fields: {
-      OWNER_TYPE_ID: 2, // Deal
-      OWNER_ID: Number(dealId),
-      TYPE_ID: 1, // Meeting
-      SUBJECT: subject,
-      DESCRIPTION: description,
-      START_TIME: start.toISOString().slice(0,19),
-      END_TIME: end.toISOString().slice(0,19),
-      COMPLETED: 'N'
-    }
-  });
+/**
+ * Compatibilidad reforzada:
+ * En algunos builds, findOrCreateContactByPhone era quien *creaba* el Lead.
+ * Aquí lo preservamos: SIEMPRE crea Lead y devuelve { contactId:null, leadId, phone }.
+ */
+export async function findOrCreateContactByPhone(phone, opts={}){
+  const res = await createLeadAlways({ phone, projectText: opts.projectText||'', name: opts.name||'WhatsApp Lead', extraFields: opts.extraFields||{} });
+  return { contactId: null, leadId: res?.result, phone };
+}
+
+/**
+ * Flujo explícito por si tu bot lo usa.
+ */
+export async function ensureLead({ phone, name='WhatsApp Lead', projectText='', extraFields={} }={}){
+  const res = await createLeadAlways({ phone, name, projectText, extraFields });
+  return { leadId: res?.result, raw: res };
+}
+
+// Helpers que otros módulos podrían requerir (no se modifican).
+export async function addActivity(fields){
+  const { data } = await http.post(url('crm.activity.add'), { fields });
+  return data;
+}
+export async function addDeal(fields){
+  const { data } = await http.post(url('crm.deal.add'), { FIELDS: fields });
+  return data;
+}
+export async function updateDeal(id, fields){
+  const { data } = await http.post(url('crm.deal.update'), { ID: id, FIELDS: fields });
+  return data;
+}
+export async function addLead(fields){
+  const { data } = await http.post(url('crm.lead.add'), { FIELDS: fields });
+  return data;
 }
