@@ -1,30 +1,39 @@
-Micro‑patch: pasar teléfono, nombre, email y proyecto a ensureLead (SIN cambiar la lógica del bot)
-==================================================================================================
+Consolidado LEADS v1 — (sin dedupe) + pasa teléfono/nombre/email/proyecto
+=========================================================================
 
-Este micro‑patch NO modifica la conversación del bot. Solo asegura que, desde el webhook,
-se envíen al creador del Lead los campos disponibles: phone (del proveedor), name, email y projectText.
+Objetivo
+--------
+- **No** cambiar la lógica conversacional del bot.
+- Asegurar que el **Lead** en Bitrix siempre se cree con:
+  - PHONE (desde webhook, sin pedirlo)
+  - TITLE/NAME (si hay nombre; si no, 'WhatsApp Lead')
+  - EMAIL (si viene o lo detectas)
+  - COMMENTS = "Interesado en: <proyecto>"
+  - ASSIGNED_BY_ID: Venetto→197; otros→4/185
+  - SOURCE_ID = WHATSAPP
+- **Sin deduplicación** (siempre `crm.lead.add`).
 
-Qué contiene
-------------
-- `snippets/lead_fields_block.js`  → Bloque listo para pegar en `src/webhooks.js`.
-- Instrucciones para añadirlo sin romper nada más.
+Contenido del ZIP
+-----------------
+1) `src/bitrix.js`  → Reemplazo directo (payload completo a Bitrix).
+2) `snippets/lead_fields_block.js` → Bloque listo para pegar en tu `src/webhooks.js` para pasar `name/email/projectText` junto con `phone`.
+3) `patches/README_PATCH.md` → Guía para aplicar el snippet sin romper tu archivo actual.
 
-Dónde pegarlo
--------------
-En tu `src/webhooks.js`, ubica el lugar donde llamas a `ensureLead(...)` o `findOrCreateContactByPhone(...)`
-y pega **antes** el bloque del archivo `snippets/lead_fields_block.js`. Luego reemplaza tu llamada existente
-por la que aparece al final del bloque (mantiene tu flujo; solo añade datos).
+Pasos (2-3 minutos)
+-------------------
+1) **Reemplaza** tu `src/bitrix.js` por el de este ZIP.
+2) Abre tu `src/webhooks.js` y **antes de** la llamada a `ensureLead(...)` o `findOrCreateContactByPhone(...)`,
+   pega el contenido de `snippets/lead_fields_block.js`.
+   - No borres nada: solo añade el bloque y usa la llamada a `ensureLead({ phone, name, email, projectText })` que está al final del snippet.
+3) Variables en Render (sin cambios):
+   - `BITRIX_WEBHOOK_BASE=https://constructorasarmientorodas.bitrix24.es/rest/1/5ca93os4y8iz331a/`
+   - `LOG_LEVEL=debug` (opcional)
+   - `APPOINTMENTS_ENABLED=false` (para que no intente crear citas reales en esta fase)
+4) Deploy y prueba desde un número nuevo: “Quiero info de Villa Venetto, mi correo es juan@ejemplo.com”.
+   - Logs: `POST …/crm.lead.add.json` → `{"result": <id>}`.
+   - En Bitrix, el lead debe tener: PHONE, NAME/TITLE, EMAIL, COMMENTS (proyecto), ASSIGNED_BY_ID correcto.
 
-Variables de entorno (sin cambios)
-----------------------------------
-- `BITRIX_WEBHOOK_BASE = https://<dominio>.bitrix24.es/rest/<USER_ID>/<TOKEN>/` (con `/` final)
-- `LOG_LEVEL=debug` (opcional)
-- `APPOINTMENTS_ENABLED=false` si no quieres crear actividades/citas aún.
-
-Checklist de verificación
--------------------------
-1) Deploy.
-2) Desde un número nuevo: “Quiero info de Villa Venetto; mi correo es juan@ejemplo.com”.
-3) Logs: POST …/crm.lead.add.json → `{"result": <id>}`.
-4) Lead en Bitrix: PHONE (webhook), NAME/TITLE (si vino nombre; si no, 'WhatsApp Lead'),
-   EMAIL (si vino), COMMENTS = “Interesado en: villa venetto”.
+Compatibilidad
+--------------
+- No se toca `server.js` ni tus imports en `webhooks.js`.
+- `bitrix.js` mantiene los exports que suelen usarse (`ensureLead`, `findOrCreateContactByPhone`, `addActivity`, `createDeal`, etc.).

@@ -41,18 +41,10 @@ const prospectEmail = emailMatch ? emailMatch[0] : undefined;
 const projectRaw = (userText || '').toLowerCase();
 
 // --- Llamada al creador del lead (SIN dedupe, SIN preguntar en código) ---
-// Usa una de las dos, según tu flujo:
 await ensureLead({
   phone,
   name: prospectName,
   email: prospectEmail,
   projectText: projectRaw
 });
-
-// O bien:
-// await findOrCreateContactByPhone(phone, {
-//   name: prospectName,
-//   email: prospectEmail,
-//   projectText: projectRaw
-// });
 // --- [FIN SNIPPET] ---

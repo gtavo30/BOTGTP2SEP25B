@@ -20,56 +20,70 @@ function chooseOwnerId(projectText=''){
   return Math.random() < 0.5 ? 4 : 185;
 }
 
-// === Cambios ultra-min: SIEMPRE crear Lead ===
-async function _createLeadRaw({ phone, name='WhatsApp Lead', projectText='', extraFields={} }={}){
+function normalizeEmail(email){
+  if (!email) return null;
+  const e = String(email).trim();
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  return ok ? e : null;
+}
+
+function buildLeadFields({ phone, name, email, projectText, extraFields = {} }){
   const ASSIGNED_BY_ID = chooseOwnerId(projectText);
-  const payload = {
-    FIELDS: {
-      TITLE: name,
-      NAME: name,
-      SOURCE_ID: 'WHATSAPP',
-      ASSIGNED_BY_ID,
-      PHONE: [{ VALUE: String(phone||''), VALUE_TYPE: 'MOBILE' }],
-      ...extraFields
-    }
+  const titleName = (name && String(name).trim()) || 'WhatsApp Lead';
+  const fields = {
+    TITLE: titleName,
+    NAME: titleName,
+    SOURCE_ID: 'WHATSAPP',
+    ASSIGNED_BY_ID,
+    PHONE: [{ VALUE: String(phone||''), VALUE_TYPE: 'MOBILE' }],
+    ...extraFields
   };
-  dbg('POST', 'crm.lead.add', payload);
-  const { data } = await http.post(u('crm.lead.add'), payload);
+  const cleanEmail = normalizeEmail(email);
+  if (cleanEmail){
+    fields.EMAIL = [{ VALUE: cleanEmail, VALUE_TYPE: 'WORK' }];
+  }
+  // Comentario con el proyecto (si viene)
+  if (projectText && String(projectText).trim()){
+    fields.COMMENTS = `Interesado en: ${projectText}`;
+  }
+  return fields;
+}
+
+// === CREAR SIEMPRE LEAD (sin dedupe) ===
+async function _createLeadRaw({ phone, name, email, projectText, extraFields }={}){
+  const FIELDS = buildLeadFields({ phone, name, email, projectText, extraFields });
+  dbg('POST', 'crm.lead.add', { FIELDS });
+  const { data } = await http.post(u('crm.lead.add'), { FIELDS });
   return data;
 }
 
 /**
- * 1) Compat preservada: en builds anteriores esta función creaba o encontraba contacto.
- *    Ahora **crea siempre el LEAD** (sin deduplicación) y retorna forma compatible.
+ * Compat: en builds anteriores esta función creaba/ encontraba contacto.
+ * Ahora **crea SIEMPRE** el Lead usando los datos que le pases.
  */
 export async function findOrCreateContactByPhone(phone, opts={}){
-  try{
-    const res = await _createLeadRaw({
-      phone,
-      name: opts.name || 'WhatsApp Lead',
-      projectText: opts.projectText || '',
-      extraFields: opts.extraFields || {}
-    });
-    return { contactId: null, leadId: res?.result, phone };
-  }catch(err){
-    dbg('findOrCreateContactByPhone.error', err?.response?.status, err?.response?.data || err?.message);
-    throw err;
-  }
+  const res = await _createLeadRaw({
+    phone,
+    name: opts.name,
+    email: opts.email,
+    projectText: opts.projectText,
+    extraFields: opts.extraFields
+  });
+  return { contactId: null, leadId: res?.result, phone };
 }
 
 /**
- * 2) Flujo explícito: asegurar Lead -> **crear siempre**.
+ * Flujo explícito: asegurar Lead -> **crear siempre**.
  */
-export async function ensureLead({ phone, name='WhatsApp Lead', projectText='', extraFields={} }={}){
-  const res = await _createLeadRaw({ phone, name, projectText, extraFields });
+export async function ensureLead({ phone, name, email, projectText, extraFields }={}){
+  const res = await _createLeadRaw({ phone, name, email, projectText, extraFields });
   return { leadId: res?.result, raw: res };
 }
 
-// === Exports restantes intactos (compatibilidad). ===
+// === Exports restantes intactos para compatibilidad ===
 export async function addLead(fields){
-  const payload = { FIELDS: fields };
-  dbg('POST', 'crm.lead.add', payload);
-  const { data } = await http.post(u('crm.lead.add'), payload);
+  dbg('POST', 'crm.lead.add', { FIELDS: fields });
+  const { data } = await http.post(u('crm.lead.add'), { FIELDS: fields });
   return data;
 }
 export async function findDealByContact(contactId){
@@ -83,15 +97,13 @@ export async function findDealByContact(contactId){
   return data?.result?.[0] || null;
 }
 export async function createDeal(fields){
-  const payload = { FIELDS: fields };
-  dbg('POST', 'crm.deal.add', payload);
-  const { data } = await http.post(u('crm.deal.add'), payload);
+  dbg('POST', 'crm.deal.add', { FIELDS: fields });
+  const { data } = await http.post(u('crm.deal.add'), { FIELDS: fields });
   return data;
 }
 export async function updateDeal(id, fields){
-  const payload = { ID: id, FIELDS: fields };
-  dbg('POST', 'crm.deal.update', payload);
-  const { data } = await http.post(u('crm.deal.update'), payload);
+  dbg('POST', 'crm.deal.update', { ID: id, FIELDS: fields });
+  const { data } = await http.post(u('crm.deal.update'), { ID: id, FIELDS: fields });
   return data;
 }
 export async function addTimelineCommentToDeal({ dealId, comment }){
