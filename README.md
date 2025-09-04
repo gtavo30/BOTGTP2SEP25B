@@ -1,19 +1,21 @@
-Patch v2: quitar deduplicación y **forzar creación de Lead** en findOrCreateContactByPhone
-=========================================================================================
+Patch v3: sin deduplicación + exports completos (compatibles con webhooks.js)
+============================================================================
 
-Este ZIP reemplaza **src/bitrix.js**. Mantiene todas tus funciones pero:
-- Elimina la deduplicación (no consulta contact/lead list).
-- **Crea SIEMPRE un Lead** cuando se invoca `findOrCreateContactByPhone(phone)`
-  (compatibilidad con builds donde esa función gatilla el alta).
-- Se conserva la asignación Venetto→197; otros→4/185 (balanceado).
-- Se mantienen helpers: addActivity, addDeal, updateDeal, addLead.
-- `ensureLead()` sigue disponible si tu flujo lo usa.
+Este patch reemplaza **src/bitrix.js** y corrige el error de deploy:
+`addTimelineCommentToDeal` faltante. Además exporta todas las funciones que
+`src/webhooks.js` importa, manteniendo el resto del comportamiento.
+
+Incluye:
+- **Sin deduplicación**: siempre crea Lead en `crm.lead.add`.
+- `findOrCreateContactByPhone` **crea Lead** (compatibilidad).
+- Exports completos: `findDealByContact`, `createDeal`, `addTimelineCommentToDeal`,
+  `createAppointment`, `addActivity`, `updateDeal`, `addLead`, `ensureLead`.
+- `createAppointment` respeta `APPOINTMENTS_ENABLED=false` (si está en env, omite la llamada).
 
 Cómo aplicar
 ------------
-1) Reemplaza `src/bitrix.js` en tu repo por este archivo.
-2) En Render, verifica `BITRIX_WEBHOOK_BASE` con **slash final** (sin `.json`). Ej.:
-   https://constructorasarmientorodas.bitrix24.es/rest/1/5ca93os4y8iz331a/
+1) Reemplaza `src/bitrix.js` por este archivo.
+2) Variables en Render:
+   - `BITRIX_WEBHOOK_BASE=https://<dominio>.bitrix24.es/rest/<USER_ID>/<TOKEN>/` (slash final).
+   - (opcional) `APPOINTMENTS_ENABLED=false` para omitir citas.
 3) Redeploy.
-4) Prueba desde WhatsApp: "Quiero info de Villa Venetto".
-   Debes ver en logs: POST .../crm.lead.add.json  ->  {"result": <id>}
