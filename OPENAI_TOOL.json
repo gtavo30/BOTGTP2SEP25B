@@ -1,0 +1,14 @@
+{
+  "name": "register_lead",
+  "description": "Registra un nuevo lead en Bitrix24 con los datos entregados por el usuario",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string", "description": "Nombre completo del prospecto" },
+      "email": { "type": "string", "description": "Correo electrónico del prospecto" },
+      "phone": { "type": "string", "description": "Teléfono del prospecto (extraído automáticamente)" },
+      "project": { "type": "string", "description": "Proyecto de interés del prospecto" }
+    },
+    "required": ["name", "email", "phone", "project"]
+  }
+}
