@@ -1,10 +1,20 @@
-Proyecto Bot - Fase 0 y 1
+HOTFIX v3a — Passthrough exacto y compatibilidad
+------------------------------------------------
+1) `src/bitrix.js` ahora pasa EXACTAMENTE `fields` a Bitrix (`{ FIELDS: {...} }`)
+   - No pone defaults de TITLE/NAME → evita "WhatsApp Lead".
+   - Si el Assistant manda EMAIL/COMMENTS/ASSIGNED_BY_ID, llegarán tal cual.
 
-Incluye:
-- Fase 0: Base passthrough (sin overrides, sin FSM, sin truncado).
-- Fase 1: Identidad (captura automática de teléfono, sin deduplicación).
+2) Stub export `addTimelineCommentToDeal()` para evitar el error de import en `webhooks.js` del proyecto base.
 
-Configuración:
-- assistant_id definido en Render.
-- Modelo se gestiona en el Asistente de OpenAI.
-- Bitrix maneja deduplicados.
+3) `src/agents.js` usa Bearer y monta `/v1/agents/lead.add` (si ENABLE_LEAD_ADD=true o no definido).
+
+**Montaje**
+En tu `server.js`:
+  import agentsRouter from './src/agents.js';
+  app.use('/v1/agents', agentsRouter);
+
+**Env**
+  BITRIX_WEBHOOK_BASE = https://constructorasarmientorodas.bitrix24.es/rest/1/5ca93os4y8iz331a/
+  AGENTS_TOKEN        = <token>
+  ENABLE_LEAD_ADD     = true
+  LOG_LEVEL           = debug (opcional)
