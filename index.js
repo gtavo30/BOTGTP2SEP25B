@@ -450,27 +450,3 @@ async function sendResponse(response, phone_no_id, token, to) {
 app.get("/", (req, res) => {
     res.status(200).send("hello bro");
 })
-app.use((req,res,next)=>{console.log('INCOMING', req.method, req.url, 'ct=', req.headers['content-type']); next();});
-
-app.get('/', (req,res)=>res.status(200).send('ok'));
-
-app.get('/webhook', (req, res) => {
-          const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'dev';
-          const mode = req.query['hub.mode'];
-          const token = req.query['hub.verify_token'];
-          const challenge = req.query['hub.challenge'];
-          if (mode === 'subscribe' && token === VERIFY_TOKEN) { return res.status(200).send(challenge); }
-          return res.sendStatus(403);
-        });
-
-
-app.post('/webhook', async (req, res) => {
-          try {
-            console.log('WEBHOOK BODY:', JSON.stringify(req.body));
-            return res.sendStatus(200);
-          } catch (err) {
-            console.error('WEBHOOK ERROR:', err?.response?.data || err);
-            return res.sendStatus(200);
-          }
-        });
-
