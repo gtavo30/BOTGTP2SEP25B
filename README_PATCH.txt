@@ -1,28 +1,22 @@
-PATCH de server.js para que el bot RESPONDA (eco) y para probar salida con /__send_test.
+PATCH v4 — Lee VERIFY_TOKEN o WHATSAPP_VERIFY_TOKEN. Soporta /webhook y /webhooks/whatsapp.
+Incluye eco y /__send_test.
 
-Variables de entorno necesarias en Render:
-- VERIFY_TOKEN        (para validación del webhook)
-- WHATSAPP_TOKEN      (token de acceso de WhatsApp Cloud / Graph API)
-- PHONE_NUMBER_ID     (ID del número de WhatsApp, ej. 123456789012345)
-- GRAPH_VERSION       (opcional; por defecto v21.0)
-- TEST_TO             (opcional; número destino para /__send_test)
+ENV en Render:
+- WHATSAPP_VERIFY_TOKEN  (o VERIFY_TOKEN)
+- WHATSAPP_TOKEN
+- PHONE_NUMBER_ID
+- GRAPH_VERSION (opcional, default v21.0)
+- TEST_TO (opcional)
 
-Instrucciones:
-1) Reemplaza tu server.js por este server.js.
-2) "start": "node server.js" en package.json.
-3) Define env vars arriba. 
-4) Deploy.
+Pasos:
+1) Reemplaza tu server.js por este.
+2) package.json: "start": "node server.js"
+3) Deploy.
 
-Pruebas rápidas:
-A) Salud:
-   curl -i "https://TU-APP.onrender.com/"
+Pruebas:
+- Verificación simulada (si tu token es 123456):
+  curl -i "https://TU-APP.onrender.com/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=123456&hub.challenge=12345"
+  (o /webhook)
 
-B) Envío directo (sin WhatsApp entrante), REEMPLAZA 593999000111:
-   curl -i "https://TU-APP.onrender.com/__send_test?to=593999000111&text=hola"
-
-   - Debe devolver JSON con status 200 y en logs "WA SEND OK ..." 
-   - Si hay error, logs mostrarán "WA SEND ERROR <status> {...}"
-
-C) Webhook (si ya está conectado en Meta):
-   Envía "hola" desde tu WhatsApp al número de WhatsApp Cloud.
-   Debes recibir "👋 Recibido: hola".
+- Envío directo:
+  curl -i "https://TU-APP.onrender.com/__send_test?to=593999000111&text=hola"

@@ -1,4 +1,5 @@
-// server.js — CommonJS + WhatsApp reply (eco) + debug endpoint
+// server.js — CommonJS; soporta /webhook y /webhooks/whatsapp (GET y POST)
+// Lee VERIFY_TOKEN o WHATSAPP_VERIFY_TOKEN
 const express = require('express');
 const app = express();
 
@@ -15,17 +16,26 @@ app.use((req, res, next) => {
 // --- Healthcheck ---
 app.get('/', (req, res) => res.status(200).send('ok'));
 
+// --- Helper para leer token ---
+function getVerifyToken() {
+  return process.env.VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || 'dev';
+}
+
 // --- Verificación Webhook (Meta) ---
-app.get('/webhook', (req, res) => {
-  const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'dev';
+function verifyWebhook(req, res) {
+  const VERIFY_TOKEN = getVerifyToken();
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
   if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('[VERIFY] OK for', req.path);
     return res.status(200).send(challenge);
   }
+  console.warn('[VERIFY] FAIL for', req.path, { mode, tokenOK: token === VERIFY_TOKEN });
   return res.sendStatus(403);
-});
+}
+app.get('/webhook', verifyWebhook);
+app.get('/webhooks/whatsapp', verifyWebhook);
 
 // --- Util: enviar texto por WhatsApp Cloud ---
 async function sendWhatsAppText(to, text) {
@@ -65,7 +75,7 @@ async function sendWhatsAppText(to, text) {
 }
 
 // --- Endpoint de debug: envío directo sin webhook ---
-// Uso (GET): /__send_test?to=593999000111&text=hola
+// Uso: GET /__send_test?to=593999000111&text=hola
 app.get('/__send_test', async (req, res) => {
   try {
     const to = req.query.to || process.env.TEST_TO;
@@ -79,8 +89,8 @@ app.get('/__send_test', async (req, res) => {
   }
 });
 
-// --- Webhook POST ---
-app.post('/webhook', async (req, res) => {
+// --- Handler de webhook para ambas rutas ---
+async function handleWebhook(req, res) {
   try {
     console.log('WEBHOOK BODY:', JSON.stringify(req.body));
 
@@ -93,17 +103,28 @@ app.post('/webhook', async (req, res) => {
     if (msg && msg.type === 'text') {
       const from = msg.from; // ej: '593999000111'
       const text = msg.text?.body || '';
-      // Responder eco para validar que "el bot responde"
       await sendWhatsAppText(from, `👋 Recibido: ${text}`);
     }
 
-    // Siempre responde 200 al webhook (evita reintentos)
     return res.sendStatus(200);
   } catch (err) {
     console.error('WEBHOOK ERROR:', err?.response?.data || err);
     return res.sendStatus(200);
   }
-});
+}
+app.post('/webhook', handleWebhook);
+app.post('/webhooks/whatsapp', handleWebhook);
 
+// --- Arranque ---
 const PORT = process.env.PORT || 3000;
+(function diagENV() {
+  const has = n => (process.env[n] ? '✅' : '❌');
+  console.log('[ENV]', 
+    'VERIFY_TOKEN', has('VERIFY_TOKEN'),
+    'WHATSAPP_VERIFY_TOKEN', has('WHATSAPP_VERIFY_TOKEN'),
+    'WHATSAPP_TOKEN', has('WHATSAPP_TOKEN'),
+    'PHONE_NUMBER_ID', has('PHONE_NUMBER_ID'),
+    'GRAPH_VERSION', process.env.GRAPH_VERSION || 'v21.0'
+  );
+})();
 app.listen(PORT, () => console.log(`[BOT] Listening on port ${PORT}`));
