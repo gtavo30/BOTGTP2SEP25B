@@ -1,10 +1,12 @@
-PATCH: Reemplazar server.js (CommonJS) para corregir "Cannot use import statement outside a module".
+PATCH de server.js para que el bot RESPONDA por WhatsApp Cloud (eco).
+
+Variables de entorno necesarias en Render:
+- VERIFY_TOKEN        (para validación del webhook)
+- WHATSAPP_TOKEN      (token de acceso de WhatsApp Cloud / Graph API)
+- PHONE_NUMBER_ID     (ID del número de WhatsApp, ej. 123456789012345)
 
 Instrucciones:
-1) Descarga este ZIP.
-2) En tu proyecto, reemplaza el archivo server.js por el contenido de este server.js.
-3) Asegúrate de que en package.json el script "start" sea: "node server.js".
-4) Deploy en Render.
-5) Prueba:
-   curl -i https://TU-APP.onrender.com/
-   curl -i -X POST https://TU-APP.onrender.com/webhook -H "Content-Type: application/json" --data '{"test":true}'
+1) Reemplaza tu server.js por este server.js (CommonJS).
+2) Asegura en package.json: "start": "node server.js"
+3) En Render, define las env vars anteriores.
+4) Deploy y prueba enviando un WhatsApp. El bot debe responder: "👋 Recibido: <tu texto>".
