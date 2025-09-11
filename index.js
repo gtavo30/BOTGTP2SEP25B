@@ -9,7 +9,8 @@ require("dotenv").config();
 const app = express().use(body_parser.json());
 
 const token = process.env.WHATSAPP_TOKEN || process.env.TOKEN;
-const mytoken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.MYTOKEN || process.env.VERIFY_TOKEN const apiKey = process.env.OPENAI_API_KEY
+const mytoken = process.env.MYTOKEN
+const apiKey = process.env.OPENAI_API_KEY
 const assistantId = process.env.ASSISTANT_ID
 const SALES_MAN = process.env.SALES_MAN
 const CRM_BASE_URL = process.env.CRM_BASE_URL
@@ -24,7 +25,7 @@ const messageQueue = {};
 
 app.listen(process.env.PORT || 8000, () => {
     console.log("webhook is listening");
-  console.log('[ENV]', 'MYTOKEN?', !!process.env.MYTOKEN, 'WHATSAPP_VERIFY_TOKEN?', !!process.env.WHATSAPP_VERIFY_TOKEN, 'TOKEN?', !!process.env.TOKEN, 'WHATSAPP_TOKEN?', !!process.env.WHATSAPP_TOKEN, 'ASSISTANT_ID?', !!process.env.ASSISTANT_ID);
+  console.log("[ENV]", "WHATSAPP_VERIFY_TOKEN", !!process.env.WHATSAPP_VERIFY_TOKEN, "WHATSAPP_TOKEN", !!process.env.WHATSAPP_TOKEN || !!process.env.TOKEN, "WHATSAPP_PHONE_ID", !!process.env.WHATSAPP_PHONE_ID, "phone_no_id", !!process.env.phone_no_id, "PHONE_NUMBER_ID", !!process.env.PHONE_NUMBER_ID);
 });
 
 app.get("/webhook", (req, res) => {
@@ -42,7 +43,6 @@ app.get("/webhook", (req, res) => {
         }
     }
 });
-
 app.get("/webhooks/whatsapp", (req, res) => {
     let mode = req.query["hub.mode"];
     let challenge = req.query["hub.challenge"];
@@ -374,7 +374,6 @@ app.post("/webhook", async (req, res) => {
         res.sendStatus(500);
     }
 });
-
 app.post("/webhooks/whatsapp", async (req, res) => {
     try {
         let body_param = req.body;
