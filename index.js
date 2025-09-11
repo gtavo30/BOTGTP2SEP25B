@@ -8,9 +8,8 @@ require("dotenv").config();
 
 const app = express().use(body_parser.json());
 
-const token = process.env.TOKEN;
-const mytoken = process.env.MYTOKEN
-const apiKey = process.env.OPENAI_API_KEY
+const token = process.env.WHATSAPP_TOKEN || process.env.TOKEN;
+const mytoken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.MYTOKEN || process.env.VERIFY_TOKEN const apiKey = process.env.OPENAI_API_KEY
 const assistantId = process.env.ASSISTANT_ID
 const SALES_MAN = process.env.SALES_MAN
 const CRM_BASE_URL = process.env.CRM_BASE_URL
@@ -23,11 +22,28 @@ const openai = new OpenAI({
 
 const messageQueue = {};
 
-app.listen(8000 || process.env.PORT, () => {
+app.listen(process.env.PORT || 8000, () => {
     console.log("webhook is listening");
+  console.log('[ENV]', 'MYTOKEN?', !!process.env.MYTOKEN, 'WHATSAPP_VERIFY_TOKEN?', !!process.env.WHATSAPP_VERIFY_TOKEN, 'TOKEN?', !!process.env.TOKEN, 'WHATSAPP_TOKEN?', !!process.env.WHATSAPP_TOKEN, 'ASSISTANT_ID?', !!process.env.ASSISTANT_ID);
 });
 
 app.get("/webhook", (req, res) => {
+    let mode = req.query["hub.mode"];
+    let challenge = req.query["hub.challenge"];
+    let token = req.query["hub.verify_token"];
+
+    if (mode && token) {
+        console.log("&");
+        if (mode === "subscribe" && token === mytoken) {
+            console.log("hello get");
+            res.status(200).send(challenge);
+        } else {
+            res.status(403);
+        }
+    }
+});
+
+app.get("/webhooks/whatsapp", (req, res) => {
     let mode = req.query["hub.mode"];
     let challenge = req.query["hub.challenge"];
     let token = req.query["hub.verify_token"];
@@ -302,6 +318,64 @@ const getAssistantResponse = async function (prompt, phone_no_id, token, recipie
 };
 
 app.post("/webhook", async (req, res) => {
+    try {
+        let body_param = req.body;
+
+        console.log(JSON.stringify(body_param, null, 2));
+
+        if (body_param.object) {
+            if (body_param.entry &&
+                body_param.entry[0].changes &&
+                body_param.entry[0].changes[0].value.messages &&
+                body_param.entry[0].changes[0].value.messages[0]
+            ) {
+                let phone_no_id = body_param.entry[0].changes[0].value.metadata.phone_number_id;
+                let from = body_param.entry[0].changes[0].value.messages[0].from;
+                let msg_body = body_param.entry[0].changes[0].value.messages[0].text.body;
+
+                if (from == FOLLOWUP_MESSAGES_TRIGGER_NUMBER) {
+                    if (msg_body == FOLLOWUP_MESSAGES_TRIGGER_COMMAND) {
+                        const followUpFunctionResponse = await followUpFunction(phone_no_id, token);
+                        console.log(followUpFunctionResponse);
+                    }
+                    else {
+                        console.log(`Please select the right command to trigger the follow-up: "${FOLLOWUP_MESSAGES_TRIGGER_COMMAND}"`);
+                    }
+                }
+                else {
+                    let assistantResponse = await getAssistantResponse(msg_body, phone_no_id, token, from);
+
+                    console.log("assistantResponse", assistantResponse);
+
+                    await axios({
+                        method: "POST",
+                        url: "https://graph.facebook.com/v13.0/" + phone_no_id + "/messages?access_token=" + token,
+                        data: {
+                            messaging_product: "whatsapp",
+                            to: from,
+                            text: {
+                                body: assistantResponse
+                            }
+                        },
+                        headers: {
+                            "Content-Type": "application/json"
+                        }
+                    });
+
+                    res.sendStatus(200);
+                }
+
+            } else {
+                res.sendStatus(404);
+            }
+        }
+    } catch (error) {
+        console.error('Error in webhook processing:', error);
+        res.sendStatus(500);
+    }
+});
+
+app.post("/webhooks/whatsapp", async (req, res) => {
     try {
         let body_param = req.body;
 
